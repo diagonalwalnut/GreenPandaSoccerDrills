@@ -1,4 +1,4 @@
-# Dual-Foot Soccer Lab
+# Panda Soccer Labs
 
 A 6-week backyard soccer training app for a competitive 11-year-old who needs stronger **ball control**, **footwork**, and **shooting power** — with equal work for the **right and left** foot in every drill.
 

@@ -10,5 +10,5 @@ new DualFootSiteStack(app, "DualFootSoccerLabStack", {
     region: process.env.CDK_DEFAULT_REGION ?? "us-east-1",
   },
   description:
-    "Dual-Foot Soccer Lab on ankyloshop.com: private S3 + CloudFront (OAC) + ACM",
+    "Panda Soccer Labs on ankyloshop.com: private S3 + CloudFront (OAC) + ACM",
 });

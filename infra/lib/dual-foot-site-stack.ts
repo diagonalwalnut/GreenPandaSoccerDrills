@@ -9,7 +9,7 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 import * as path from "path";
 
-/** Apex domain for Dual-Foot Soccer Lab. */
+/** Apex domain for Panda Soccer Labs. */
 export const SITE_DOMAIN = "ankyloshop.com";
 export const WWW_DOMAIN = `www.${SITE_DOMAIN}`;
 
@@ -59,7 +59,7 @@ export class DualFootSiteStack extends cdk.Stack {
       this,
       "SecurityHeaders",
       {
-        comment: "Baseline security headers for Dual-Foot Soccer Lab",
+        comment: "Baseline security headers for Panda Soccer Labs",
         securityHeadersBehavior: {
           contentTypeOptions: { override: true },
           frameOptions: {
@@ -87,7 +87,7 @@ export class DualFootSiteStack extends cdk.Stack {
     );
 
     const distribution = new cloudfront.Distribution(this, "Distribution", {
-      comment: `Dual-Foot Soccer Lab (${SITE_DOMAIN})`,
+      comment: `Panda Soccer Labs (${SITE_DOMAIN})`,
       domainNames: [SITE_DOMAIN, WWW_DOMAIN],
       certificate,
       defaultRootObject: "index.html",

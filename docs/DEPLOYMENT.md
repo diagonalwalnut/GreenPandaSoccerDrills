@@ -201,23 +201,34 @@ If DNS is still propagating (Step 3), HTTPS may fail until `dig NS ankyloshop.co
 
 ---
 
-## Step 7 — Day-to-day: automatic deploy on merge
+## Step 7 — Lock `main` so only PR merges update it
 
-1. Open a pull request into `main` (via GitHub’s UI or github.dev — still no laptop tooling required).  
-2. **CI** builds the PR ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)). Fix failures before merging.  
-3. **Merge** the PR.  
-4. **Deploy to ankyloshop.com** runs automatically.  
-5. After it finishes, https://ankyloshop.com serves the new build (usually within a couple of minutes).
+Cursor previously pushed straight to `main`. Stop that by enabling a GitHub **ruleset** (you must do this in the GitHub UI; automation cannot enable it without admin OAuth you declined).
 
-Open PRs never deploy to production. Only merges (or pushes) to `main` do.
+**Follow [BRANCH_PROTECTION.md](./BRANCH_PROTECTION.md)** (Settings → Rules → Rulesets → protect `main`, require a pull request, no bypass actors).
+
+Until that ruleset is **Active**, tools with push access can still write to `main` directly.
 
 ---
 
-## Step 8 — Verify end-to-end
+## Step 8 — Day-to-day: automatic deploy on merge
 
-1. Merge a small PR.  
+1. Work happens on a **feature branch** and a **pull request** into `main` (see [CONTRIBUTING.md](./CONTRIBUTING.md)).  
+2. **CI** builds the PR ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)). Fix failures before merging.  
+3. **You** merge the PR in GitHub (human in the loop).  
+4. **Deploy to ankyloshop.com** runs automatically.  
+5. After it finishes, https://ankyloshop.com serves the new build (usually within a couple of minutes).
+
+Open PRs never deploy to production. Only merges to `main` do. Agents must not merge unless you explicitly ask.
+
+---
+
+## Step 9 — Verify end-to-end
+
+1. Merge a small PR yourself.  
 2. Actions → open the deploy run for that merge → all steps green.  
-3. Hard-refresh https://ankyloshop.com and confirm the change.
+3. Hard-refresh https://ankyloshop.com and confirm the change.  
+4. Confirm a direct push to `main` is rejected (Step 7).
 
 ---
 

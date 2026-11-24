@@ -39,12 +39,16 @@ PR merged → main → GitHub Actions deploys to https://ankyloshop.com
 **Full setup (browser-only: AWS Console, CloudShell, DNSimple, GitHub):**  
 **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
 
+**Require PRs for `main` (human merge — no direct Cursor pushes):**  
+**[docs/BRANCH_PROTECTION.md](docs/BRANCH_PROTECTION.md)** · agent rules: **[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)**
+
 Summary:
 
 1. AWS Console (`us-east-1`) → create Route 53 hosted zone for `ankyloshop.com`
 2. DNSimple → set custom nameservers to the four Route 53 NS values (AWS manages DNS afterward)
 3. AWS CloudShell → `cdk bootstrap` + `cdk deploy` (runs on AWS, not your PC)
 4. GitHub → Environment `production` + secrets from stack outputs
-5. Actions → run **Deploy to ankyloshop.com** once, then merge PRs for automatic deploys
+5. GitHub → Ruleset on `main` requiring pull requests ([BRANCH_PROTECTION.md](docs/BRANCH_PROTECTION.md))
+6. Actions → run **Deploy to ankyloshop.com** once, then **you** merge PRs for automatic deploys
 
 **Expected cost** at light traffic: about **$1–5/month** (S3/CloudFront) + **~$0.50/month** (Route 53). ACM is free. DNSimple only bills domain registration after DNS is delegated.

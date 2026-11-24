@@ -15,8 +15,8 @@ export default function HomePage() {
             {programIntro.player}
           </p>
           <h1 className="mt-3 max-w-xl font-[family-name:var(--font-display)] text-4xl leading-[0.95] text-white sm:text-5xl">
-            Dual-Foot
-            <span className="block text-[color:var(--volt)]">Soccer Lab</span>
+            Panda
+            <span className="block text-[color:var(--volt)]">Soccer Labs</span>
           </h1>
           <p className="mt-4 max-w-lg text-base leading-relaxed text-white/80">
             A 6-week backyard program that fixes ball control and footwork while

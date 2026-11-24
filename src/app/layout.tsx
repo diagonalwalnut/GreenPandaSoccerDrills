@@ -21,7 +21,7 @@ const mono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Dual-Foot Soccer Lab",
+  title: "Panda Soccer Labs",
   description:
     "Six-week backyard soccer program for dual-foot control, footwork, and shooting power.",
 };
@@ -38,7 +38,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           {children}
         </main>
         <footer className="border-t border-white/10 py-6 text-center text-xs text-white/50">
-          Dual-Foot Soccer Lab · Both feet, every drill · ~30 min backyard sessions
+          Panda Soccer Labs · Both feet, every drill · ~30 min backyard sessions
         </footer>
       </body>
     </html>

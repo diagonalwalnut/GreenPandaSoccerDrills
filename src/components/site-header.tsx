@@ -17,10 +17,10 @@ export function SiteHeader() {
       <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4">
         <Link href="/" className="group flex items-baseline gap-2">
           <span className="font-[family-name:var(--font-display)] text-lg tracking-tight text-white">
-            Dual-Foot
+            Panda
           </span>
           <span className="hidden text-xs uppercase tracking-[0.18em] text-[color:var(--chalk)]/70 sm:inline">
-            Soccer Lab
+            Soccer Labs
           </span>
         </Link>
         <nav className="flex items-center gap-1">

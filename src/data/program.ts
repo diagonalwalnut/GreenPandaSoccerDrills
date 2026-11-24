@@ -514,7 +514,7 @@ export function getSession(id: string): Session | undefined {
 }
 
 export const programIntro = {
-  name: "Dual-Foot Backyard Program",
+  name: "Panda Soccer Labs Backyard Program",
   player: "Competitive U12 · 6 years playing",
   duration: "6 weeks",
   sessionsPerWeek: "3 sessions (A/B/C) · ~30 minutes each",

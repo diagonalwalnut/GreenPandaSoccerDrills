@@ -1,18 +1,36 @@
 # Deployment setup — ankyloshop.com
 
-This guide walks through **every step** to host Dual-Foot Soccer Lab on AWS and turn on **automatic deploys when a pull request is merged into `main`**.
+This guide sets up hosting and **automatic deploys when a pull request is merged into `main`**.
+
+**You do not install anything on your personal computer.** All one-time setup uses:
+
+- the **AWS Console** and **AWS CloudShell** (a browser terminal that runs *inside AWS*), and
+- the **GitHub** website, and
+- the **DNSimple** website (only to hand DNS control to AWS).
 
 **Production URL:** https://ankyloshop.com (also https://www.ankyloshop.com)
 
 ```text
-Developer opens PR → CI builds (no deploy)
+You (browser) → AWS CloudShell: create infra once
+You (browser) → DNSimple: point nameservers at Route 53
+You (browser) → GitHub: secrets + merge PRs
      ↓
-PR merged into main → GitHub Actions “Deploy to ankyloshop.com”
-     ↓
-npm run build → S3 sync → CloudFront invalidation
+PR merged into main → GitHub Actions builds & deploys
      ↓
 https://ankyloshop.com updated
 ```
+
+---
+
+## What “local” means here
+
+| Phrase | Meaning |
+|--------|---------|
+| **Not used** | Installing Node, AWS CLI, or CDK on your laptop |
+| **AWS CloudShell** | Temporary Linux shell *in your AWS account* (browser). Commands run on AWS, not on your PC. |
+| **GitHub Actions** | Builds and deploys on GitHub’s runners after each merge |
+
+Day-to-day you only use GitHub (PRs) and a web browser to view https://ankyloshop.com.
 
 ---
 
@@ -20,122 +38,101 @@ https://ankyloshop.com updated
 
 | Piece | Purpose |
 |-------|---------|
-| Route 53 hosted zone | DNS for `ankyloshop.com` |
+| Route 53 hosted zone | AWS becomes the **DNS authority** for `ankyloshop.com` |
+| DNSimple NS change | Registrar still at DNSimple; DNS answers come from Route 53 |
 | ACM certificate | Free HTTPS for apex + `www` |
-| S3 bucket (private) | Stores the static Next.js export |
-| CloudFront distribution | Global CDN + HTTPS front door |
-| IAM OIDC role | Lets GitHub Actions deploy without access keys |
-| GitHub Actions secrets | Wire the workflow to your AWS stack |
-| GitHub Environment `production` | Optional protection on the deploy job |
+| S3 + CloudFront | Static site hosting |
+| IAM OIDC role | GitHub Actions deploys without AWS access keys on your PC |
+| GitHub secrets + `production` env | Wire the deploy workflow |
 
 ---
 
-## Step 1 — Install tools locally
+## Step 1 — Open AWS in the browser (us-east-1)
 
-1. Install **Node.js 22+** and **npm**.
-2. Install the **AWS CLI v2** and confirm it works:
-
-   ```bash
-   aws --version
-   ```
-
-3. Install the CDK CLI (used via `npx` in this repo, so a global install is optional):
-
-   ```bash
-   npm install -g aws-cdk
-   ```
-
-4. Clone the app:
-
-   ```bash
-   git clone https://github.com/diagonalwalnut/GreenPandaSoccerDrills.git
-   cd GreenPandaSoccerDrills
-   ```
+1. Sign in to the [AWS Management Console](https://console.aws.amazon.com/).
+2. In the top bar, set the region to **US East (N. Virginia) `us-east-1`**.  
+   CloudFront custom-domain certificates must be issued in this region.
+3. Confirm you can open services such as Route 53 and CloudFormation.
 
 ---
 
-## Step 2 — Configure AWS credentials
+## Step 2 — Create a Route 53 hosted zone (AWS manages DNS)
 
-1. Create or use an IAM user / SSO identity with permission to manage S3, CloudFront, ACM, Route 53, IAM, and CloudFormation (AdministratorAccess is simplest for a personal account).
-2. Configure the CLI for account **us-east-1** (required for CloudFront certificates):
+This is the AWS side of “AWS will manage the host.” DNS records for the website live in Route 53 after this.
 
-   ```bash
-   aws configure
-   # AWS Access Key ID / Secret, region: us-east-1, output: json
-   ```
-
-3. Confirm identity and region:
-
-   ```bash
-   aws sts get-caller-identity
-   echo "$AWS_REGION"   # should be us-east-1, or export AWS_REGION=us-east-1
-   export AWS_REGION=us-east-1
-   export AWS_DEFAULT_REGION=us-east-1
-   ```
-
-4. Note your **12-digit account ID** from `get-caller-identity` — you need it for bootstrap.
-
----
-
-## Step 3 — Create the Route 53 hosted zone for ankyloshop.com
-
-1. In the AWS Console, open **Route 53 → Hosted zones → Create hosted zone**.
+1. Open **Route 53 → Hosted zones → Create hosted zone**.
 2. Set:
    - **Domain name:** `ankyloshop.com`
    - **Type:** Public hosted zone
-3. Create the zone and copy the **NS** records (four nameservers).
-4. At your **domain registrar** (where you bought ankyloshop.com), set the domain’s nameservers to those four NS values.
-5. Wait until DNS delegation works (often minutes, sometimes up to 48 hours):
+3. Click **Create hosted zone**.
+4. Open the new zone and find the **NS** record. Copy the **four** nameserver values (they look like `ns-xxxx.awsdns-xx.org`).
+
+Leave this tab open — you need those NS values in DNSimple next.
+
+> The CDK stack looks up this hosted zone by name in the same AWS account. Create it before Step 4.
+
+---
+
+## Step 3 — Connect DNSimple to AWS (delegate DNS)
+
+Your domain can stay **registered** at DNSimple. You are only changing **who answers DNS queries** so that **AWS Route 53** manages `ankyloshop.com` (and `www`).
+
+This connection was **not** automatic in earlier docs; follow these DNSimple steps:
+
+1. Sign in to [DNSimple](https://dnsimple.com/).
+2. Open **Domains** → select **ankyloshop.com**.
+3. Open the **Name Servers** (or **DNS / Delegation**) settings for that domain.  
+   DNSimple’s UI labels this as managing name servers / delegating to another provider.
+4. Switch from DNSimple’s own name servers to **custom / external name servers**.
+5. Paste the **four Route 53 NS hostnames** from Step 2 (one per field). Do not invent NS names; use exactly what Route 53 shows.
+6. Save.
+
+**What this does**
+
+- DNSimple remains the registrar (billing/renewal for the domain name).
+- After delegation propagates, the internet asks **Route 53** for `ankyloshop.com` records.
+- CDK will create the apex and `www` **A/AAAA** aliases to CloudFront in Route 53.
+- You do **not** need to create A/AAAA records for the site inside DNSimple once NS are pointed at Route 53 (DNSimple DNS records are no longer used for public resolution).
+
+**Check propagation** (from any browser DNS tool, or CloudShell later):
+
+```bash
+dig NS ankyloshop.com +short
+```
+
+You should see the AWS `awsdns` nameservers. This can take minutes to 48 hours.
+
+---
+
+## Step 4 — Bootstrap and deploy infra in AWS CloudShell (not your PC)
+
+CloudShell is a browser terminal **inside AWS**. Nothing is installed on your computer.
+
+1. In the AWS Console top bar, click the **CloudShell** icon (terminal). Wait until the shell is ready. Prefer region **us-east-1**.
+2. Clone the repo and install infra dependencies (downloads happen in CloudShell’s home directory on AWS):
 
    ```bash
-   dig NS ankyloshop.com +short
+   git clone https://github.com/diagonalwalnut/GreenPandaSoccerDrills.git
+   cd GreenPandaSoccerDrills/infra
+   npm install
    ```
 
-   You should see the Route 53 nameservers.
+3. Bootstrap CDK once for this account/region:
 
-> The CDK stack **looks up** this hosted zone by name. Deploy will fail if the zone is missing from the same AWS account.
+   ```bash
+   ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+   npx cdk bootstrap "aws://${ACCOUNT_ID}/us-east-1"
+   ```
 
----
+4. Deploy the stack (creates S3, CloudFront, ACM, Route 53 aliases, GitHub OIDC deploy role):
 
-## Step 4 — Bootstrap CDK (one time per account/region)
+   ```bash
+   npx cdk deploy --require-approval never
+   ```
 
-```bash
-cd infra
-npm install
+   [`infra/cdk.json`](../infra/cdk.json) already sets `githubOwner`, `githubRepo`, and `siteDomain` (`ankyloshop.com`).
 
-ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
-npx cdk bootstrap "aws://${ACCOUNT_ID}/us-east-1"
-```
-
-This creates the CDK staging bucket and roles CloudFormation needs. Run it once; safe to re-run.
-
----
-
-## Step 5 — Deploy the infrastructure stack
-
-Still in `infra/`:
-
-```bash
-npx cdk deploy
-```
-
-[`cdk.json`](../infra/cdk.json) already sets:
-
-- `githubOwner` = `diagonalwalnut`
-- `githubRepo` = `GreenPandaSoccerDrills`
-- `siteDomain` = `ankyloshop.com`
-
-Approve the IAM changes when prompted.
-
-**What this creates:**
-
-1. Private S3 bucket (Block Public Access, SSE-S3)
-2. ACM certificate for `ankyloshop.com` + `www.ankyloshop.com` (DNS validated in Route 53)
-3. CloudFront distribution with OAC, TLS 1.2+, security headers, URL rewrite
-4. Route 53 **A/AAAA** aliases for apex and `www` → CloudFront
-5. IAM role + GitHub OIDC provider for Actions deploys (trust limited to this repo’s `main` branch)
-
-**Save these stack outputs** (printed at the end of `cdk deploy`):
+5. When deploy finishes, **copy the Outputs** printed at the end (or open **CloudFormation → Stacks → DualFootSoccerLabStack → Outputs**):
 
 | Output | Used for |
 |--------|----------|
@@ -143,9 +140,8 @@ Approve the IAM changes when prompted.
 | `BucketName` | GitHub secret `AWS_S3_BUCKET` |
 | `DistributionId` | GitHub secret `AWS_CLOUDFRONT_DISTRIBUTION_ID` |
 | `GitHubDeployRoleArn` | GitHub secret `AWS_DEPLOY_ROLE_ARN` |
-| `DistributionDomainName` | Debug / CloudFront console |
 
-You can re-print outputs anytime:
+Re-print outputs anytime in CloudShell:
 
 ```bash
 aws cloudformation describe-stacks \
@@ -154,83 +150,74 @@ aws cloudformation describe-stacks \
   --query 'Stacks[0].Outputs'
 ```
 
----
+**What the stack creates**
 
-## Step 6 — Upload the first site build (recommended once)
-
-Before relying on CI, prove the stack serves content:
-
-```bash
-cd ..   # repo root
-./scripts/deploy-static.sh
-```
-
-Then open https://ankyloshop.com and confirm the app loads (HTTPS, both feet drills, week links).
+1. Private S3 bucket  
+2. ACM cert for `ankyloshop.com` + `www.ankyloshop.com` (DNS validated via Route 53)  
+3. CloudFront distribution (HTTPS, OAC, security headers)  
+4. Route 53 A/AAAA for apex and `www` → CloudFront  
+5. IAM role for GitHub Actions (OIDC, `main` branch only)
 
 ---
 
-## Step 7 — Configure GitHub for automatic deploy on PR merge
+## Step 5 — Configure GitHub (browser only)
 
-Merging a PR into `main` creates a **push** to `main`. That runs [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml), which builds the static site, syncs S3, and invalidates CloudFront.
+Merging a PR into `main` triggers [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml).
 
-### 7.1 Create the `production` environment
+### 5.1 Create the `production` environment
 
-1. Open https://github.com/diagonalwalnut/GreenPandaSoccerDrills/settings/environments
-2. Click **New environment**
-3. Name it exactly: `production`
-4. (Optional) Add required reviewers if you want a human gate before production deploys
-5. Save
+1. Open https://github.com/diagonalwalnut/GreenPandaSoccerDrills/settings/environments  
+2. **New environment** → name exactly `production` → save  
+3. Optional: add required reviewers for production deploys  
 
-The deploy workflow references `environment: production`.
+### 5.2 Add repository secrets
 
-### 7.2 Add repository secrets
+1. Open https://github.com/diagonalwalnut/GreenPandaSoccerDrills/settings/secrets/actions  
+2. Create each secret (names must match exactly):
 
-1. Open https://github.com/diagonalwalnut/GreenPandaSoccerDrills/settings/secrets/actions
-2. Click **New repository secret** for each row below (name must match exactly):
+| Secret name | Paste from CloudFormation output |
+|-------------|----------------------------------|
+| `AWS_DEPLOY_ROLE_ARN` | `GitHubDeployRoleArn` |
+| `AWS_S3_BUCKET` | `BucketName` |
+| `AWS_CLOUDFRONT_DISTRIBUTION_ID` | `DistributionId` |
 
-| Secret name | Value source |
-|-------------|--------------|
-| `AWS_DEPLOY_ROLE_ARN` | CloudFormation output `GitHubDeployRoleArn` |
-| `AWS_S3_BUCKET` | CloudFormation output `BucketName` |
-| `AWS_CLOUDFRONT_DISTRIBUTION_ID` | CloudFormation output `DistributionId` |
+Do **not** create long-lived AWS access keys on your computer or in GitHub. Actions use OIDC.
 
-3. Confirm all three appear under **Repository secrets**.
+### 5.3 Confirm Actions are enabled
 
-> Do **not** create long-lived AWS access keys for Actions. The workflow assumes the IAM role via **OIDC**.
-
-### 7.3 Confirm Actions are enabled
-
-1. Open https://github.com/diagonalwalnut/GreenPandaSoccerDrills/settings/actions
-2. Ensure Actions are allowed for this repository (e.g. **Allow all actions and reusable workflows**).
-3. Open the **Actions** tab and verify workflows **CI** and **Deploy to ankyloshop.com** are listed.
-
-### 7.4 Run a one-time manual deploy from GitHub (optional)
-
-1. Actions → **Deploy to ankyloshop.com** → **Run workflow** → branch `main` → **Run workflow**
-2. Confirm the job turns green and https://ankyloshop.com updates.
+1. https://github.com/diagonalwalnut/GreenPandaSoccerDrills/settings/actions  
+2. Allow Actions for this repo  
+3. Actions tab should list **CI** and **Deploy to ankyloshop.com**
 
 ---
 
-## Step 8 — Day-to-day: automatic deploy on merge
+## Step 6 — First site publish (GitHub Actions, not your PC)
 
-1. Create a branch and open a **pull request** into `main`.
-2. The **CI** workflow ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) builds the site on the PR. Fix failures before merging.
-3. **Merge** the PR (merge commit, squash, or rebase — all result in a push to `main`).
-4. GitHub starts **Deploy to ankyloshop.com** automatically.
-5. When the job finishes, CloudFront invalidation completes and https://ankyloshop.com serves the new build (usually within a minute or two; rare edge cache lag up to a few minutes).
+1. GitHub → **Actions** → **Deploy to ankyloshop.com** → **Run workflow** → branch `main` → **Run workflow**.  
+2. Wait for a green run.  
+3. Open https://ankyloshop.com (and https://www.ankyloshop.com).  
 
-Direct pushes to `main` also deploy. Open PRs never deploy to production.
+If DNS is still propagating (Step 3), HTTPS may fail until `dig NS ankyloshop.com` shows Route 53 nameservers and the ACM cert is **Issued** in ACM.
 
 ---
 
-## Step 9 — Verify the pipeline end-to-end
+## Step 7 — Day-to-day: automatic deploy on merge
 
-1. Make a trivial README or copy change on a feature branch.
-2. Open a PR → confirm **CI** passes.
-3. Merge the PR.
-4. On the Actions tab, open the deploy run for that merge commit.
-5. Confirm steps: Checkout → Install → Build → Configure AWS → Sync/Invalidate all green.
-6. Hard-refresh https://ankyloshop.com and confirm the change.
+1. Open a pull request into `main` (via GitHub’s UI or github.dev — still no laptop tooling required).  
+2. **CI** builds the PR ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)). Fix failures before merging.  
+3. **Merge** the PR.  
+4. **Deploy to ankyloshop.com** runs automatically.  
+5. After it finishes, https://ankyloshop.com serves the new build (usually within a couple of minutes).
+
+Open PRs never deploy to production. Only merges (or pushes) to `main` do.
+
+---
+
+## Step 8 — Verify end-to-end
+
+1. Merge a small PR.  
+2. Actions → open the deploy run for that merge → all steps green.  
+3. Hard-refresh https://ankyloshop.com and confirm the change.
 
 ---
 
@@ -238,28 +225,15 @@ Direct pushes to `main` also deploy. Open PRs never deploy to production.
 
 | Symptom | What to check |
 |---------|----------------|
-| `cdk deploy` can’t find hosted zone | Step 3 — zone for `ankyloshop.com` in the same account; or pass `-c hostedZoneId=Z…` |
-| ACM cert stuck pending | Route 53 NS not delegated yet; wait for dig NS to show AWS nameservers |
-| Deploy workflow “Missing GitHub Actions secrets” | Step 7.2 — all three secret names exact |
-| `Not authorized to perform sts:AssumeRoleWithWebIdentity` | Role trust must allow `repo:diagonalwalnut/GreenPandaSoccerDrills:ref:refs/heads/main`; re-deploy CDK if the role was created with wrong context |
-| Site 403/404 after deploy | Run `./scripts/deploy-static.sh` once; confirm `out/` has `index.html` and week/session folders |
-| Old content after green deploy | Wait for invalidation; hard-refresh or try an incognito window |
+| ACM cert stuck **Pending validation** | Step 3 — DNSimple NS not yet pointing at Route 53; wait for propagation |
+| Site doesn’t resolve | DNSimple still on DNSimple NS; re-check the four `awsdns` nameservers |
+| `cdk deploy` can’t find hosted zone | Step 2 — hosted zone `ankyloshop.com` in this account |
+| Deploy workflow missing secrets | Step 5.2 — exact secret names |
+| `AssumeRoleWithWebIdentity` denied | OIDC trust is `repo:diagonalwalnut/GreenPandaSoccerDrills:ref:refs/heads/main`; re-run `cdk deploy` in CloudShell if the role was wrong |
+| 403/404 on the site | Run Step 6 (manual Actions deploy) once after infra is up |
 
 ---
 
-## Local commands cheat sheet
-
-```bash
-# App
-npm ci && npm run build          # writes out/
-
-# Infra
-cd infra && npm ci && npx cdk diff && npx cdk deploy
-
-# One-shot content publish
-./scripts/deploy-static.sh
-```
-
 ## Cost reminder
 
-Light family traffic: roughly **$1–5/month** CloudFront/S3 + **~$0.50/month** Route 53 hosted zone. ACM is free. No ALB or always-on compute.
+Light family traffic: roughly **$1–5/month** CloudFront/S3 + **~$0.50/month** Route 53 hosted zone. ACM is free. DNSimple continues to charge whatever you pay them for **domain registration** only (not for DNS hosting once delegated).

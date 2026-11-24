@@ -19,18 +19,9 @@ Multiple balls, cones + flat disks, 6 agility poles, agility ladder, two 12′×
 
 Aim for **3 sessions per week**. If you only have two days, do **A then B** and skip C that week (don’t skip A).
 
-## Run locally
+## Preview the app (optional)
 
-```bash
-npm install
-npm run dev
-```
-
-Open [http://localhost:3847](http://localhost:3847).
-
-```bash
-npm run build   # static export → out/
-```
+If you only want to click around before AWS is live, open the repo in [github.dev](https://github.dev/diagonalwalnut/GreenPandaSoccerDrills) or use a cloud IDE. **Production setup does not require installing Node or the AWS CLI on your computer** — see the deployment guide.
 
 ## Stack
 
@@ -38,22 +29,22 @@ Next.js (App Router) static export, TypeScript, Tailwind CSS, shadcn/ui.
 
 ## AWS deployment (serverless)
 
-Low-cost pattern: **private S3** + **CloudFront** on **ankyloshop.com**, managed with **AWS CDK**.
+**private S3** + **CloudFront** on **ankyloshop.com**, with DNS managed by **Route 53**. The domain can stay **registered at DNSimple**; you point DNSimple’s nameservers at Route 53 so AWS answers DNS.
 
 ```text
 PR opened        → CI builds (no deploy)
 PR merged → main → GitHub Actions deploys to https://ankyloshop.com
 ```
 
-**Full setup (every step):** see **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
+**Full setup (browser-only: AWS Console, CloudShell, DNSimple, GitHub):**  
+**[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
 
-Summary of that guide:
+Summary:
 
-1. Install Node, AWS CLI; configure credentials in `us-east-1`
-2. Create a Route 53 public hosted zone for `ankyloshop.com` and point the registrar NS records at it
-3. `cd infra && npm install && npx cdk bootstrap && npx cdk deploy`
-4. (Recommended) `./scripts/deploy-static.sh` once to seed content
-5. In GitHub: create Environment `production` and secrets `AWS_DEPLOY_ROLE_ARN`, `AWS_S3_BUCKET`, `AWS_CLOUDFRONT_DISTRIBUTION_ID`
-6. Merge a PR into `main` — deploy runs automatically
+1. AWS Console (`us-east-1`) → create Route 53 hosted zone for `ankyloshop.com`
+2. DNSimple → set custom nameservers to the four Route 53 NS values (AWS manages DNS afterward)
+3. AWS CloudShell → `cdk bootstrap` + `cdk deploy` (runs on AWS, not your PC)
+4. GitHub → Environment `production` + secrets from stack outputs
+5. Actions → run **Deploy to ankyloshop.com** once, then merge PRs for automatic deploys
 
-**Expected cost** at light traffic: about **$1–5/month** (S3/CloudFront) + **~$0.50/month** (Route 53). ACM is free.
+**Expected cost** at light traffic: about **$1–5/month** (S3/CloudFront) + **~$0.50/month** (Route 53). ACM is free. DNSimple only bills domain registration after DNS is delegated.

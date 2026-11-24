@@ -27,10 +27,54 @@ npm run dev
 Open [http://localhost:3847](http://localhost:3847).
 
 ```bash
-npm run build
-npm start
+npm run build   # static export → out/
 ```
 
 ## Stack
 
-Next.js (App Router), TypeScript, Tailwind CSS, shadcn/ui.
+Next.js (App Router) static export, TypeScript, Tailwind CSS, shadcn/ui.
+
+## AWS deployment (serverless)
+
+Low-cost enterprise pattern: **private S3** origin + **CloudFront** (HTTPS, OAC, security headers, URL rewrite) provisioned with **AWS CDK** (TypeScript).
+
+```text
+Users → CloudFront (TLS 1.2+, compress, cache)
+          → Origin Access Control
+          → Private S3 bucket (SSE-S3, Block Public Access)
+```
+
+**Expected cost** at light family traffic: about **$1–5/month** (no ALB, no Fargate, no SSR compute).
+
+### 1. Deploy infrastructure
+
+```bash
+cd infra
+npm install
+npx cdk bootstrap aws://ACCOUNT_ID/us-east-1   # once per account/region
+npx cdk deploy \
+  -c githubOwner=diagonalwalnut \
+  -c githubRepo=GreenPandaSoccerDrills
+```
+
+Note the outputs: `SiteUrl`, `BucketName`, `DistributionId`, and (if context was set) `GitHubDeployRoleArn`.
+
+### 2. Upload the site (local)
+
+Requires AWS CLI credentials with access to the stack:
+
+```bash
+./scripts/deploy-static.sh
+```
+
+### 3. GitHub Actions (optional)
+
+After CDK deploy, add repository secrets:
+
+| Secret | Value |
+|--------|--------|
+| `AWS_DEPLOY_ROLE_ARN` | `GitHubDeployRoleArn` output |
+| `AWS_S3_BUCKET` | `BucketName` output |
+| `AWS_CLOUDFRONT_DISTRIBUTION_ID` | `DistributionId` output |
+
+Pushes to `main` build `out/` and sync to S3 + invalidate CloudFront (OIDC, no long-lived keys).

@@ -1,0 +1,22 @@
+{
+  "name": "dual-foot-soccer-lab-infra",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "synth": "cdk synth",
+    "diff": "cdk diff",
+    "deploy": "cdk deploy --require-approval never",
+    "destroy": "cdk destroy --force"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.214.0",
+    "constructs": "^10.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "aws-cdk": "^2.214.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.0"
+  }
+}

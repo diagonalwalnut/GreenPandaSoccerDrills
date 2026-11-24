@@ -1,10 +1,17 @@
 import * as cdk from "aws-cdk-lib";
+import * as acm from "aws-cdk-lib/aws-certificatemanager";
 import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as iam from "aws-cdk-lib/aws-iam";
+import * as route53 from "aws-cdk-lib/aws-route53";
+import * as targets from "aws-cdk-lib/aws-route53-targets";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 import * as path from "path";
+
+/** Apex domain for Dual-Foot Soccer Lab. */
+export const SITE_DOMAIN = "ankyloshop.com";
+export const WWW_DOMAIN = `www.${SITE_DOMAIN}`;
 
 export class DualFootSiteStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -18,6 +25,26 @@ export class DualFootSiteStack extends cdk.Stack {
       // Destroyable for low-cost personal use; empty before delete on stack destroy.
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
+    });
+
+    // Prefer an explicit zone id (CI / synth without AWS). Otherwise look up by domain.
+    const hostedZoneId = this.node.tryGetContext("hostedZoneId") as
+      | string
+      | undefined;
+    const zone = hostedZoneId
+      ? route53.HostedZone.fromHostedZoneAttributes(this, "HostedZone", {
+          hostedZoneId,
+          zoneName: SITE_DOMAIN,
+        })
+      : route53.HostedZone.fromLookup(this, "HostedZone", {
+          domainName: SITE_DOMAIN,
+        });
+
+    // CloudFront requires ACM certificates in us-east-1.
+    const certificate = new acm.Certificate(this, "SiteCertificate", {
+      domainName: SITE_DOMAIN,
+      subjectAlternativeNames: [WWW_DOMAIN],
+      validation: acm.CertificateValidation.fromDns(zone),
     });
 
     const urlRewrite = new cloudfront.Function(this, "UrlRewrite", {
@@ -60,7 +87,9 @@ export class DualFootSiteStack extends cdk.Stack {
     );
 
     const distribution = new cloudfront.Distribution(this, "Distribution", {
-      comment: "Dual-Foot Soccer Lab",
+      comment: `Dual-Foot Soccer Lab (${SITE_DOMAIN})`,
+      domainNames: [SITE_DOMAIN, WWW_DOMAIN],
+      certificate,
       defaultRootObject: "index.html",
       minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
       httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
@@ -93,6 +122,38 @@ export class DualFootSiteStack extends cdk.Stack {
           ttl: cdk.Duration.minutes(5),
         },
       ],
+    });
+
+    new route53.ARecord(this, "ApexARecord", {
+      zone,
+      recordName: SITE_DOMAIN,
+      target: route53.RecordTarget.fromAlias(
+        new targets.CloudFrontTarget(distribution),
+      ),
+    });
+
+    new route53.AaaaRecord(this, "ApexAaaaRecord", {
+      zone,
+      recordName: SITE_DOMAIN,
+      target: route53.RecordTarget.fromAlias(
+        new targets.CloudFrontTarget(distribution),
+      ),
+    });
+
+    new route53.ARecord(this, "WwwARecord", {
+      zone,
+      recordName: WWW_DOMAIN,
+      target: route53.RecordTarget.fromAlias(
+        new targets.CloudFrontTarget(distribution),
+      ),
+    });
+
+    new route53.AaaaRecord(this, "WwwAaaaRecord", {
+      zone,
+      recordName: WWW_DOMAIN,
+      target: route53.RecordTarget.fromAlias(
+        new targets.CloudFrontTarget(distribution),
+      ),
     });
 
     // GitHub Actions OIDC deploy role (no long-lived access keys).
@@ -163,12 +224,17 @@ export class DualFootSiteStack extends cdk.Stack {
 
     new cdk.CfnOutput(this, "DistributionDomainName", {
       value: distribution.distributionDomainName,
-      description: "CloudFront HTTPS domain (https://<value>)",
+      description: "CloudFront domain (alias target / debug)",
     });
 
     new cdk.CfnOutput(this, "SiteUrl", {
-      value: `https://${distribution.distributionDomainName}`,
+      value: `https://${SITE_DOMAIN}`,
       description: "Public site URL",
+    });
+
+    new cdk.CfnOutput(this, "WwwSiteUrl", {
+      value: `https://${WWW_DOMAIN}`,
+      description: "www alias (same CloudFront distribution)",
     });
   }
 }

@@ -37,8 +37,15 @@ SITE_URL="$(aws cloudformation describe-stacks \
 
 if [[ -z "$BUCKET_NAME" || "$BUCKET_NAME" == "None" ]]; then
   echo "error: BucketName output not found. Deploy the CDK stack first:" >&2
-  echo "  cd infra && npx cdk deploy -c githubOwner=diagonalwalnut -c githubRepo=GreenPandaSoccerDrills" >&2
+  echo "  cd infra && npx cdk deploy" >&2
+  echo "  (serves https://ankyloshop.com — requires Route 53 hosted zone)" >&2
   exit 1
+fi
+
+# Prefer the custom domain output; fall back to the known production URL.
+PUBLIC_URL="${SITE_URL:-https://ankyloshop.com}"
+if [[ -z "$PUBLIC_URL" || "$PUBLIC_URL" == "None" ]]; then
+  PUBLIC_URL="https://ankyloshop.com"
 fi
 
 echo "==> Syncing out/ → s3://${BUCKET_NAME}"
@@ -50,4 +57,4 @@ aws cloudfront create-invalidation \
   --paths "/*" \
   --region "$REGION" >/dev/null
 
-echo "==> Done. Site: ${SITE_URL}"
+echo "==> Done. Site: ${PUBLIC_URL}"

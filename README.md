@@ -38,62 +38,22 @@ Next.js (App Router) static export, TypeScript, Tailwind CSS, shadcn/ui.
 
 ## AWS deployment (serverless)
 
-Low-cost enterprise pattern: **private S3** origin + **CloudFront** on **ankyloshop.com** (HTTPS via ACM, OAC, security headers, URL rewrite) provisioned with **AWS CDK** (TypeScript).
+Low-cost pattern: **private S3** + **CloudFront** on **ankyloshop.com**, managed with **AWS CDK**.
 
 ```text
-Users → https://ankyloshop.com (and www)
-          → CloudFront (TLS 1.2+, compress, cache)
-          → Origin Access Control
-          → Private S3 bucket (SSE-S3, Block Public Access)
-DNS: Route 53 hosted zone for ankyloshop.com → alias to CloudFront
+PR opened        → CI builds (no deploy)
+PR merged → main → GitHub Actions deploys to https://ankyloshop.com
 ```
 
-**Expected cost** at light family traffic: about **$1–5/month** for S3/CloudFront, plus ~**$0.50/month** for the Route 53 hosted zone (no ALB, no Fargate, no SSR compute). ACM certificates are free.
+**Full setup (every step):** see **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
 
-### Prerequisites
+Summary of that guide:
 
-1. A **Route 53 public hosted zone** for `ankyloshop.com` in the same AWS account (nameservers delegated from your registrar).
-2. Deploy the stack in **`us-east-1`** (required for CloudFront ACM certificates).
-3. AWS credentials with rights to ACM, CloudFront, S3, Route 53, and IAM.
+1. Install Node, AWS CLI; configure credentials in `us-east-1`
+2. Create a Route 53 public hosted zone for `ankyloshop.com` and point the registrar NS records at it
+3. `cd infra && npm install && npx cdk bootstrap && npx cdk deploy`
+4. (Recommended) `./scripts/deploy-static.sh` once to seed content
+5. In GitHub: create Environment `production` and secrets `AWS_DEPLOY_ROLE_ARN`, `AWS_S3_BUCKET`, `AWS_CLOUDFRONT_DISTRIBUTION_ID`
+6. Merge a PR into `main` — deploy runs automatically
 
-### 1. Deploy infrastructure
-
-```bash
-cd infra
-npm install
-npx cdk bootstrap aws://ACCOUNT_ID/us-east-1   # once per account/region
-npx cdk deploy
-```
-
-Defaults in [`infra/cdk.json`](infra/cdk.json) already set `githubOwner`, `githubRepo`, and `siteDomain` (`ankyloshop.com`).
-
-CDK will:
-
-- Look up the `ankyloshop.com` hosted zone
-- Issue an ACM cert for `ankyloshop.com` + `www.ankyloshop.com` (DNS validation)
-- Attach the cert to CloudFront
-- Create apex and `www` A/AAAA alias records to the distribution
-
-Note the outputs: `SiteUrl` (`https://ankyloshop.com`), `BucketName`, `DistributionId`, and `GitHubDeployRoleArn`.
-
-### 2. Upload the site (local)
-
-Requires AWS CLI credentials with access to the stack:
-
-```bash
-./scripts/deploy-static.sh
-```
-
-When finished, open [https://ankyloshop.com](https://ankyloshop.com).
-
-### 3. GitHub Actions (optional)
-
-After CDK deploy, add repository secrets on [GreenPandaSoccerDrills](https://github.com/diagonalwalnut/GreenPandaSoccerDrills):
-
-| Secret | Value |
-|--------|--------|
-| `AWS_DEPLOY_ROLE_ARN` | `GitHubDeployRoleArn` output |
-| `AWS_S3_BUCKET` | `BucketName` output |
-| `AWS_CLOUDFRONT_DISTRIBUTION_ID` | `DistributionId` output |
-
-Pushes to `main` build `out/` and sync to S3 + invalidate CloudFront (OIDC, no long-lived keys). The public URL remains **https://ankyloshop.com**.
+**Expected cost** at light traffic: about **$1–5/month** (S3/CloudFront) + **~$0.50/month** (Route 53). ACM is free.

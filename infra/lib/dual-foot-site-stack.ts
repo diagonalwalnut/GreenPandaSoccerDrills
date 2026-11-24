@@ -182,8 +182,9 @@ export class DualFootSiteStack extends cdk.Stack {
             StringEquals: {
               "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
             },
+            // Only main-branch workflows (PR merges / push to main / workflow_dispatch on main).
             StringLike: {
-              "token.actions.githubusercontent.com:sub": `repo:${githubOwner}/${githubRepo}:*`,
+              "token.actions.githubusercontent.com:sub": `repo:${githubOwner}/${githubRepo}:ref:refs/heads/main`,
             },
           },
           "sts:AssumeRoleWithWebIdentity",
